@@ -1,4 +1,4 @@
-const CACHE='my-deals-shell-v3';
+const CACHE='my-deals-shell-v4';
 const SHELL=[
   './','./index.html','./style.css','./app.js','./firebase-config.js',
   './manifest.webmanifest','./favicon.svg','./icons/icon-180.png',

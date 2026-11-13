@@ -62,10 +62,10 @@ function localAdapter() {
     subscribeComments(id,callback) { listeners.comments.set(id,callback);callback(readDetails('comments')[id]||[]);return()=>listeners.comments.delete(id); },
     subscribeSettings(callback) { listeners.settings=callback;callback(Number(localStorage.getItem('my-capacity-preview-v1'))||240);return()=>{listeners.settings=null}; },
     subscribeProjects(callback) { listeners.projects=callback;callback(JSON.parse(localStorage.getItem('my-projects-preview-v1')||'null')||[...defaultProjects]);return()=>{listeners.projects=null}; },
-    async add(task) { write([...read(), { ...normalizeTask(task), id: crypto.randomUUID() }]); },
+    async add(task) { const id=crypto.randomUUID();write([...read(), { ...normalizeTask(task), id }]);return id; },
     async update(id, patch) { write(read().map(t => t.id === id ? { ...t, ...patch, updatedAt: new Date().toISOString() } : t)); },
     async remove(id) { for (const kind of ['subtasks','comments']) { const all=readDetails(kind);delete all[id];localStorage.setItem(detailKey(kind),JSON.stringify(all)); } write(read().filter(t => t.id !== id)); },
-    async addSubtask(id,text) { writeDetails('subtasks',id,[...(readDetails('subtasks')[id]||[]),{id:crypto.randomUUID(),text,done:false,createdAt:new Date().toISOString()}]); },
+    async addSubtask(id,text,done=false) { writeDetails('subtasks',id,[...(readDetails('subtasks')[id]||[]),{id:crypto.randomUUID(),text,done,createdAt:new Date().toISOString()}]); },
     async updateSubtask(id,subtaskId,patch) { writeDetails('subtasks',id,(readDetails('subtasks')[id]||[]).map(item=>item.id===subtaskId?{...item,...patch}:item)); },
     async removeSubtask(id,subtaskId) { writeDetails('subtasks',id,(readDetails('subtasks')[id]||[]).filter(item=>item.id!==subtaskId)); },
     async addComment(id,text) { writeDetails('comments',id,[...(readDetails('comments')[id]||[]),{id:crypto.randomUUID(),text,createdAt:new Date().toISOString()}]); },
@@ -103,7 +103,7 @@ async function startCloud() {
     subscribeComments(id,callback) { return dbLib.onSnapshot(commentsFor(id),snapshot=>callback(snapshot.docs.map(doc=>({id:doc.id,...doc.data(),createdAt:doc.data().createdAt?.toDate?.().toISOString()||''}))),error=>setStatus(`Не удалось загрузить комментарии: ${error.message}`)); },
     subscribeSettings(callback) { return dbLib.onSnapshot(settingsRef(state.user),snapshot=>callback(snapshot.data()?.capacityMin||240),error=>setStatus(`Не удалось загрузить план дня: ${error.message}`)); },
     subscribeProjects(callback) { return dbLib.onSnapshot(projectsFor(state.user),snapshot=>{const saved=snapshot.docs.map(doc=>({id:doc.id,name:doc.data().name,persisted:true}));callback([...defaultProjects.filter(item=>!saved.some(project=>project.id===item.id)),...saved]);},error=>setStatus(`Не удалось загрузить проекты: ${error.message}`)); },
-    add(task) { trackWrite(dbLib.addDoc(tasksFor(state.user), {...normalizeTask(task),createdAt:dbLib.serverTimestamp(),updatedAt:dbLib.serverTimestamp()})); },
+    add(task) { const ref=dbLib.doc(tasksFor(state.user));trackWrite(dbLib.setDoc(ref,{...normalizeTask(task),createdAt:dbLib.serverTimestamp(),updatedAt:dbLib.serverTimestamp()}));return ref.id; },
     update(id, patch) { trackWrite(dbLib.updateDoc(dbLib.doc(tasksFor(state.user),id), {...patch, updatedAt:dbLib.serverTimestamp()})); },
     remove(id) {
       const batch=dbLib.writeBatch(db);
@@ -111,7 +111,7 @@ async function startCloud() {
       for(const item of state.comments) batch.delete(dbLib.doc(commentsFor(id),item.id));
       batch.delete(dbLib.doc(tasksFor(state.user),id));trackWrite(batch.commit());
     },
-    addSubtask(id,text) { trackWrite(dbLib.addDoc(subtasksFor(id),{text,done:false,createdAt:dbLib.serverTimestamp(),updatedAt:dbLib.serverTimestamp()})); },
+    addSubtask(id,text,done=false) { trackWrite(dbLib.addDoc(subtasksFor(id),{text,done,createdAt:dbLib.serverTimestamp(),updatedAt:dbLib.serverTimestamp()})); },
     updateSubtask(id,subtaskId,patch) { trackWrite(dbLib.updateDoc(dbLib.doc(subtasksFor(id),subtaskId),{...patch,updatedAt:dbLib.serverTimestamp()})); },
     removeSubtask(id,subtaskId) { trackWrite(dbLib.deleteDoc(dbLib.doc(subtasksFor(id),subtaskId))); },
     addComment(id,text) { trackWrite(dbLib.addDoc(commentsFor(id),{text,createdAt:dbLib.serverTimestamp()})); },
@@ -304,7 +304,7 @@ function taskRow(task) {
       setStatus(`Повторяющееся дело перенесено на ${dateLabel(patch.dueDate)}.`);
     } else mutate(()=>state.adapter.update(task.id,{done:checkbox.checked}));
   });
-  const body=document.createElement('div'); body.className='task-body';
+  const body=document.createElement('button'); body.type='button';body.className='task-body';body.setAttribute('aria-label',`Открыть дело: ${task.title}`);body.addEventListener('click',()=>openTask(task));
   const title=document.createElement('span'); title.className='task-title'; title.textContent=task.title; body.append(title);
   const meta=document.createElement('div'); meta.className='task-meta';
   if (task.priority) { const priority=document.createElement('span'); priority.className=`task-priority ${task.priority}`;priority.textContent=({high:'Важное',medium:'Среднее',low:'Низкое'})[task.priority];meta.append(priority); }
@@ -315,11 +315,14 @@ function taskRow(task) {
   const plan=document.createElement('button');plan.type='button';plan.className=`task-plan${task.plannedDate===today()?' active':''}`;plan.textContent=task.plannedDate===today()?'★':'☆';plan.setAttribute('aria-label',task.plannedDate===today()?`Убрать из плана: ${task.title}`:`В план на сегодня: ${task.title}`);
   plan.addEventListener('click',()=>mutate(()=>state.adapter.update(task.id,{plannedDate:task.plannedDate===today()?'':today()})));
   const menu=document.createElement('button'); menu.type='button'; menu.className='task-menu'; menu.textContent='⋯'; menu.setAttribute('aria-label',`Изменить: ${task.title}`); menu.addEventListener('click',()=>openTask(task));
-  row.append(checkbox,body,plan,menu); return row;
+  row.append(checkbox,body,plan,menu);
+  row.addEventListener('click',event=>{if(event.target===row)openTask(task);});
+  return row;
 }
 
 function openTask(task) {
   closeDetails();state.openTaskId=task.id;
+  $('#task-dialog-title').textContent='Изменить дело';$('#save-task').textContent='Сохранить';$('#delete-task').hidden=false;$('#comment-form button').textContent='Отправить';
   const form=$('#edit-form');form.elements.id.value=task.id;form.elements.title.value=task.title;form.elements.dueDate.value=task.dueDate||'';form.elements.project.value=projectId(task.project);
   form.elements.priority.value=task.priority||'';form.elements.estimateMin.value=String(task.estimateMin||0);form.elements.repeat.value=task.repeat||'';
   form.elements.remindAt.value=task.remindAt?localDateTime(task.remindAt):'';form.elements.plannedToday.checked=task.plannedDate===today();
@@ -329,6 +332,16 @@ function openTask(task) {
     state.adapter.subscribeComments(task.id,items=>{state.comments=items;renderTaskDetails();})
   ];
   $('#task-dialog').showModal();form.elements.title.focus();
+}
+function openCreateTask() {
+  if(state.cloud&&!state.user){$('#auth-dialog').showModal();return;}
+  closeDetails();state.subtasks=[];state.comments=[];
+  const quick=$('#quick-form').elements,form=$('#edit-form');form.reset();
+  form.elements.id.value='';form.elements.title.value=quick.title.value.trim();
+  form.elements.dueDate.value=quick.dueDate.value;form.elements.project.value=quick.project.value;form.elements.priority.value=quick.priority.value;
+  form.elements.plannedToday.checked=state.view==='today'&&!state.project;
+  $('#task-dialog-title').textContent='Новое дело';$('#save-task').textContent='Создать дело';$('#delete-task').hidden=true;$('#comment-form button').textContent='Добавить';$('#task-error').textContent='';
+  $('#subtask-form').reset();$('#comment-form').reset();renderTaskDetails();$('#task-dialog').showModal();form.elements.title.focus();
 }
 function localDateTime(value) { const date=new Date(value);return `${date.toLocaleDateString('sv-SE')}T${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`; }
 function closeDetails() { state.detailUnsubscribers.forEach(unsubscribe=>unsubscribe());state.detailUnsubscribers=[];state.openTaskId=''; }
@@ -355,10 +368,10 @@ function renderTaskDetails() {
   for(const item of [...state.subtasks].sort((a,b)=>createdAt(a).localeCompare(createdAt(b)))) {
     const row=document.createElement('div');row.className='detail-row';
     const check=document.createElement('input');check.type='checkbox';check.checked=!!item.done;check.setAttribute('aria-label',`Шаг выполнен: ${item.text}`);
-    check.addEventListener('change',()=>mutate(()=>state.adapter.updateSubtask(state.openTaskId,item.id,{done:check.checked})));
+    check.addEventListener('change',()=>{if(!state.openTaskId){item.done=check.checked;renderTaskDetails();}else mutate(()=>state.adapter.updateSubtask(state.openTaskId,item.id,{done:check.checked}));});
     const text=document.createElement('span');text.textContent=item.text;if(item.done)text.className='completed';
     const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.setAttribute('aria-label',`Удалить шаг: ${item.text}`);
-    remove.addEventListener('click',()=>mutate(()=>state.adapter.removeSubtask(state.openTaskId,item.id)));
+    remove.addEventListener('click',()=>{if(!state.openTaskId){state.subtasks=state.subtasks.filter(step=>step.id!==item.id);renderTaskDetails();}else mutate(()=>state.adapter.removeSubtask(state.openTaskId,item.id));});
     row.append(check,text,remove);steps.append(row);
   }
   const comments=$('#comment-list');comments.replaceChildren();
@@ -366,20 +379,29 @@ function renderTaskDetails() {
     const row=document.createElement('div');row.className='comment-row';
     const text=document.createElement('p');text.textContent=item.text;
     const time=document.createElement('small');time.textContent=item.createdAt?new Date(item.createdAt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Сейчас';
-    row.append(text,time);comments.append(row);
+    row.append(text,time);
+    if(!state.openTaskId){const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.setAttribute('aria-label','Убрать комментарий');remove.addEventListener('click',()=>{state.comments=state.comments.filter(comment=>comment.id!==item.id);renderTaskDetails();});row.append(remove);}
+    comments.append(row);
   }
 }
-async function mutate(operation) { try { setStatus(''); await operation(); } catch(error) { setStatus(`Не удалось сохранить дело: ${error.message}`); } }
+async function mutate(operation) { try { setStatus(''); return await operation(); } catch(error) { setStatus(`Не удалось сохранить дело: ${error.message}`); } }
 
-document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click',()=>{state.view=button.dataset.view;state.project='';setQuickDefaults();render();window.scrollTo(0,0)}));
-$('#project-nav').addEventListener('click',event=>{const button=event.target.closest('[data-project]');if(!button)return;state.project=button.dataset.project;state.view='all';setQuickDefaults();render();window.scrollTo(0,0)});
-for(const button of [$('#manage-projects'),$('#mobile-projects')])button.addEventListener('click',()=>{$('#project-error').textContent='';renderProjectDialog();$('#projects-dialog').showModal();});
+function openMenu(){document.body.classList.add('menu-open');$('#drawer-backdrop').hidden=false;$('#mobile-menu').setAttribute('aria-expanded','true');}
+function closeMenu(){document.body.classList.remove('menu-open');$('#drawer-backdrop').hidden=true;$('#mobile-menu').setAttribute('aria-expanded','false');}
+$('#mobile-menu').addEventListener('click',openMenu);
+$('#close-menu').addEventListener('click',closeMenu);
+$('#drawer-backdrop').addEventListener('click',closeMenu);
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('menu-open'))closeMenu();});
+document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click',()=>{state.view=button.dataset.view;state.project='';closeMenu();setQuickDefaults();render();window.scrollTo(0,0)}));
+$('#project-nav').addEventListener('click',event=>{const button=event.target.closest('[data-project]');if(!button)return;state.project=button.dataset.project;state.view='all';closeMenu();setQuickDefaults();render();window.scrollTo(0,0)});
+$('#manage-projects').addEventListener('click',()=>{closeMenu();$('#project-error').textContent='';renderProjectDialog();$('#projects-dialog').showModal();});
 $('#project-form').addEventListener('submit',async event=>{event.preventDefault();const name=event.currentTarget.elements.name.value.trim();const error=validProjectName(name)|| (state.projects.length>=30?'Можно создать не больше 30 проектов.':'');$('#project-error').textContent=error;if(error)return;await mutate(()=>state.adapter.saveProject(crypto.randomUUID(),name));event.currentTarget.reset();});
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click',()=>document.getElementById(button.dataset.close).close()));
 $('#task-dialog').addEventListener('close',closeDetails);
 $('#day-capacity').addEventListener('change',event=>{const hours=Number(event.target.value);if(!Number.isFinite(hours)||hours<1||hours>16){event.target.value=String(state.capacityMin/60);return;}mutate(()=>state.adapter.setCapacity(Math.round(hours*60)));});
-$('#subtask-form').addEventListener('submit',async event=>{event.preventDefault();const text=event.currentTarget.elements.text.value.trim();if(!text||!state.openTaskId)return;await mutate(()=>state.adapter.addSubtask(state.openTaskId,text));event.currentTarget.reset();});
-$('#comment-form').addEventListener('submit',async event=>{event.preventDefault();const text=event.currentTarget.elements.text.value.trim();if(!text||!state.openTaskId)return;await mutate(()=>state.adapter.addComment(state.openTaskId,text));event.currentTarget.reset();});
+$('#subtask-form').addEventListener('submit',async event=>{event.preventDefault();const text=event.currentTarget.elements.text.value.trim();if(!text)return;if(state.openTaskId)await mutate(()=>state.adapter.addSubtask(state.openTaskId,text));else{state.subtasks.push({id:crypto.randomUUID(),text,done:false,createdAt:new Date().toISOString()});renderTaskDetails();}event.currentTarget.reset();});
+$('#comment-form').addEventListener('submit',async event=>{event.preventDefault();const text=event.currentTarget.elements.text.value.trim();if(!text)return;if(state.openTaskId)await mutate(()=>state.adapter.addComment(state.openTaskId,text));else{state.comments.push({id:crypto.randomUUID(),text,createdAt:new Date().toISOString()});renderTaskDetails();}event.currentTarget.reset();});
+$('#detailed-add').addEventListener('click',openCreateTask);
 $('#account-button').addEventListener('click',()=>{if(state.cloud && !state.user) $('#auth-dialog').showModal(); else if(state.cloud) setStatus(`Вход выполнен: ${state.user.email}`); else setStatus('Это локальный предпросмотр. Облачный вход пока не подключён.')});
 $('#quick-form').addEventListener('submit', async event => {
   event.preventDefault(); if(state.cloud && !state.user) {$('#auth-dialog').showModal();return;}
@@ -388,7 +410,8 @@ $('#quick-form').addEventListener('submit', async event => {
   await mutate(()=>state.adapter.add(task)); form.reset(); setQuickDefaults(); $('#quick-title').focus();
 });
 $('#edit-form').addEventListener('submit', async event => {
-  event.preventDefault(); const data=new FormData(event.currentTarget); const id=String(data.get('id')); const title=String(data.get('title')).trim(); if(!title)return;
+  event.preventDefault();if(state.cloud&&!state.user){$('#auth-dialog').showModal();return;}
+  const data=new FormData(event.currentTarget); const existingId=String(data.get('id')); const title=String(data.get('title')).trim(); if(!title)return;
   const dueDate=String(data.get('dueDate')||'');const repeat=String(data.get('repeat')||'');
   if(repeat&&!dueDate){$('#task-error').textContent='Для повтора укажи дату дела.';return;}
   const estimateMin=Number(data.get('estimateMin')||0);
@@ -396,7 +419,25 @@ $('#edit-form').addEventListener('submit', async event => {
   const reminder=String(data.get('remindAt')||'');
   const patch={title,dueDate,project:String(data.get('project')||''),priority:String(data.get('priority')||''),estimateMin,repeat,
     remindAt:reminder?new Date(reminder).toISOString():'',plannedDate:data.has('plannedToday')?today():'',repeatAnchor:repeat==='monthly'?Number(dueDate.slice(-2)):0};
-  await mutate(()=>state.adapter.update(id,patch));$('#task-dialog').close();
+  const pendingStep=$('#subtask-form').elements.text.value.trim();
+  const pendingComment=$('#comment-form').elements.text.value.trim();
+  const save=$('#save-task');if(save.disabled)return;save.disabled=true;
+  try{
+    if(existingId){
+      await mutate(()=>state.adapter.update(existingId,patch));
+      if(pendingStep)await mutate(()=>state.adapter.addSubtask(existingId,pendingStep));
+      if(pendingComment)await mutate(()=>state.adapter.addComment(existingId,pendingComment));
+    }else{
+      const id=await mutate(()=>state.adapter.add({...patch,done:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}));
+      if(!id)return;
+      for(const step of state.subtasks)await mutate(()=>state.adapter.addSubtask(id,step.text,step.done));
+      if(pendingStep)await mutate(()=>state.adapter.addSubtask(id,pendingStep));
+      for(const comment of state.comments)await mutate(()=>state.adapter.addComment(id,comment.text));
+      if(pendingComment)await mutate(()=>state.adapter.addComment(id,pendingComment));
+      $('#quick-form').reset();setQuickDefaults();
+    }
+    $('#task-dialog').close();
+  }finally{save.disabled=false;}
 });
 $('#delete-task').addEventListener('click', async()=>{const id=$('#edit-form').elements.id.value;if(!confirm('Удалить это дело?'))return;await mutate(()=>state.adapter.remove(id));$('#task-dialog').close()});
 

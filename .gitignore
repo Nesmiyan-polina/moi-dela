@@ -6,3 +6,4 @@ live-smoke.mjs
 pwa-smoke.mjs
 offline-integration.mjs
 feature-qa.mjs
+ux-qa.mjs

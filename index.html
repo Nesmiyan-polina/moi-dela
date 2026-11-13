@@ -14,8 +14,8 @@
 </head>
 <body>
   <div id="app" class="app">
-    <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">✓</span> Мои дела</div>
+    <aside class="sidebar" id="sidebar" aria-label="Меню планера">
+      <div class="sidebar-head"><div class="brand"><span class="brand-mark">✓</span> Мои дела</div><button type="button" id="close-menu" class="close-menu" aria-label="Закрыть меню">×</button></div>
       <nav class="nav" aria-label="Разделы">
         <button type="button" data-view="today" class="nav-item active">Сегодня <span id="count-today">0</span></button>
         <button type="button" data-view="inbox" class="nav-item">Входящие <span id="count-inbox">0</span></button>
@@ -29,12 +29,14 @@
       <button type="button" class="manage-projects" id="manage-projects">＋ Управлять проектами</button>
       <div class="account"><span id="account-label"></span><button id="sign-out" type="button" hidden>Выйти</button></div>
     </aside>
+    <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
 
     <main class="main">
       <div id="mode-banner" class="mode-banner" hidden>Предпросмотр: дела хранятся только на этом устройстве. Синхронизация пока не подключена.</div>
       <header class="topbar">
-        <div><p class="eyebrow" id="date-label"></p><h1 id="page-title">Сегодня</h1></div>
-        <div class="topbar-actions"><button class="icon-button" type="button" id="mobile-projects" aria-label="Проекты">#</button><button class="icon-button" type="button" id="account-button" aria-label="Аккаунт">●</button></div>
+        <button class="icon-button mobile-menu-button" type="button" id="mobile-menu" aria-label="Открыть меню" aria-expanded="false">☰</button>
+        <div class="topbar-title"><p class="eyebrow" id="date-label"></p><h1 id="page-title">Сегодня</h1></div>
+        <button class="icon-button" type="button" id="account-button" aria-label="Аккаунт">●</button>
       </header>
 
       <div id="day-plan" class="day-plan" hidden>
@@ -51,6 +53,7 @@
           <label>Срок <input name="dueDate" type="date"></label>
           <label>Проект <select name="project"><option value="">Без проекта</option></select></label>
           <label>Важность <select name="priority"><option value="">Обычная</option><option value="high">Высокая</option><option value="medium">Средняя</option><option value="low">Низкая</option></select></label>
+          <button type="button" id="detailed-add" class="detailed-add">Создать с подробностями</button>
         </div>
       </form>
 
@@ -62,17 +65,9 @@
     </main>
   </div>
 
-  <nav class="mobile-nav" aria-label="Разделы на телефоне">
-    <button type="button" data-view="today" class="active">Сегодня</button>
-    <button type="button" data-view="inbox">Входящие</button>
-    <button type="button" data-view="upcoming">Ближайшие</button>
-    <button type="button" data-view="calendar">Календарь</button>
-    <button type="button" data-view="all">Все</button>
-  </nav>
-
   <dialog id="task-dialog" class="dialog">
     <form id="edit-form" method="dialog">
-      <div class="dialog-head"><h2>Изменить дело</h2><button type="button" data-close="task-dialog" aria-label="Закрыть">×</button></div>
+      <div class="dialog-head"><h2 id="task-dialog-title">Изменить дело</h2><button type="button" data-close="task-dialog" aria-label="Закрыть">×</button></div>
       <input name="id" type="hidden">
       <label>Дело<input name="title" maxlength="160" required></label>
       <label>Срок<input name="dueDate" type="date"></label>
@@ -83,10 +78,10 @@
       <label>Напомнить при открытом планере<input name="remindAt" type="datetime-local"></label>
       <label class="inline-check"><input name="plannedToday" type="checkbox"> В план на сегодня</label>
       <p id="task-error" class="form-error" role="alert"></p>
-      <div class="dialog-actions"><button type="button" class="text-button danger" id="delete-task">Удалить</button><button type="submit" class="primary-button">Сохранить</button></div>
     </form>
     <div class="task-detail-section"><h3>Шаги</h3><div id="subtask-list"></div><form id="subtask-form"><input name="text" maxlength="160" placeholder="Добавить шаг" required><button type="submit">Добавить</button></form></div>
     <div class="task-detail-section"><h3>Комментарии</h3><div id="comment-list"></div><form id="comment-form"><textarea name="text" maxlength="1000" rows="2" placeholder="Оставить комментарий" required></textarea><button type="submit">Отправить</button></form></div>
+    <div class="dialog-actions"><button type="button" class="text-button danger" id="delete-task">Удалить</button><button type="submit" form="edit-form" class="primary-button" id="save-task">Сохранить</button></div>
   </dialog>
 
   <dialog id="projects-dialog" class="dialog">
