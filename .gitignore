@@ -2,4 +2,4 @@
 preview-*.png
 node_modules/
 smoke-test.mjs
-create-github-repo.ps1
+live-smoke.mjs
