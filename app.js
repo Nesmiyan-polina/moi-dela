@@ -15,6 +15,7 @@ const category = (task) => !taskDate(task) ? 'nodate' : taskDate(task) <= today(
 const priorityRank = {high:0,medium:1,low:2,'':3};
 const sortTasks = (a,b) => Number(a.done)-Number(b.done) || (priorityRank[a.priority||'']-priorityRank[b.priority||'']) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || (a.createdAt || '').localeCompare(b.createdAt || '');
 const estimateLabel = minutes => minutes >= 60 ? `${Math.floor(minutes/60)} ч ${minutes%60?`${minutes%60} мин`:''}`.trim() : `${minutes} мин`;
+const taskCountLabel = count => `${count} ${count%100>=11&&count%100<=14?'дел':count%10===1?'дело':count%10>=2&&count%10<=4?'дела':'дел'}`;
 const taskDefaults = {priority:'',estimateMin:0,repeat:'',remindAt:'',plannedDate:'',repeatAnchor:0};
 const normalizeTask = task => ({...taskDefaults,...task});
 const detailKey = name => `my-${name}-preview-v1`;
@@ -228,9 +229,10 @@ function render() {
   $('#task-sections').hidden=state.view==='calendar'&&!state.project;
   if (state.view==='calendar'&&!state.project) renderCalendar();
   $('#day-plan').hidden=state.view!=='today'||!!state.project;
-  const planned=active.filter(task=>task.plannedDate===today());
-  const estimated=planned.reduce((sum,task)=>sum+(Number(task.estimateMin)||0),0);
-  $('#day-plan-summary').textContent=`${planned.length} дел · ${estimateLabel(estimated)} из ${estimateLabel(state.capacityMin)}${estimated>state.capacityMin?' · план перегружен':''}`;
+  const todayTasks=active.filter(task=>task.plannedDate===today()||category(task)==='today');
+  const estimated=todayTasks.reduce((sum,task)=>sum+(Number(task.estimateMin)||0),0);
+  const withoutEstimate=todayTasks.filter(task=>!Number(task.estimateMin)).length;
+  $('#day-plan-summary').textContent=!todayTasks.length?'Дел на сегодня нет':`${taskCountLabel(todayTasks.length)} · ${estimated?`оценено ${estimateLabel(estimated)} из ${estimateLabel(state.capacityMin)}${withoutEstimate?` · без оценки: ${withoutEstimate}`:''}`:'время не указано'}${estimated>state.capacityMin?' · времени не хватает':''}`;
   $('#day-plan').classList.toggle('overloaded',estimated>state.capacityMin);
   const sections = state.project || state.view === 'all' ? ['today','upcoming','nodate'] : state.view==='today' ? ['plan','due'] : [state.view];
   const wrapper = $('#task-sections'); wrapper.replaceChildren();
