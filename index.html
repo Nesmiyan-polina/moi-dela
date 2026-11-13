@@ -4,8 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#15572e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Мои дела</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/icon-180.png">
+  <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -46,6 +50,7 @@
       </form>
 
       <div id="status" class="status" role="status" aria-live="polite"></div>
+      <div id="sync-status" class="sync-status" role="status" aria-live="polite"></div>
       <div id="task-sections" class="sections"></div>
     </main>
   </div>
@@ -70,14 +75,14 @@
 
   <dialog id="auth-dialog" class="dialog auth-dialog">
     <form id="auth-form" method="dialog">
-      <div class="dialog-head"><h2 id="auth-title">Войти</h2><button type="button" data-close="auth-dialog" aria-label="Закрыть">×</button></div>
-      <p>Войдите, чтобы видеть одни и те же дела на телефоне и компьютере.</p>
+      <div class="dialog-head"><h2 id="auth-title">Создать аккаунт</h2><button type="button" data-close="auth-dialog" aria-label="Закрыть">×</button></div>
+      <p>Зарегистрируйтесь один раз, чтобы видеть свои дела на телефоне и компьютере.</p>
       <label>Почта<input name="email" type="email" autocomplete="email" required></label>
-      <label>Пароль<input name="password" type="password" minlength="6" autocomplete="current-password" required></label>
+      <label>Пароль<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
       <p id="auth-error" class="form-error" role="alert"></p>
-      <button type="submit" class="primary-button full" id="auth-submit">Войти</button>
-      <button type="button" class="text-button full" id="auth-switch">Создать аккаунт</button>
-      <button type="button" class="text-button full" id="password-reset">Забыли пароль?</button>
+      <button type="submit" class="primary-button full" id="auth-submit">Создать аккаунт</button>
+      <button type="button" class="text-button full" id="auth-switch">Уже есть аккаунт? Войти</button>
+      <button type="button" class="text-button full" id="password-reset" hidden>Забыли пароль?</button>
     </form>
   </dialog>
 

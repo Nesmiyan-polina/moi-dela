@@ -1,7 +1,7 @@
 import { firebaseConfig } from './firebase-config.js';
 
 const $ = (selector) => document.querySelector(selector);
-const state = { tasks: [], view: 'today', project: '', user: null, cloud: false, adapter: null, unsubscribe: null, authMode: 'login' };
+const state = { tasks: [], view: 'today', project: '', user: null, cloud: false, adapter: null, unsubscribe: null, authMode: 'signup', snapshotMetadata: null };
 const today = () => new Date().toLocaleDateString('sv-SE');
 const dateLabel = (value) => value ? new Date(`${value}T12:00:00`).toLocaleDateString('ru-RU', {day:'numeric', month:'short'}) : '';
 const taskDate = (task) => task.dueDate || '';
@@ -22,34 +22,39 @@ function localAdapter() {
 }
 
 async function startCloud() {
-  const base = 'https://www.gstatic.com/firebasejs/13.2.0/';
   const [{initializeApp}, authLib, dbLib] = await Promise.all([
-    import(`${base}firebase-app.js`), import(`${base}firebase-auth.js`), import(`${base}firebase-firestore.js`)
+    import('./vendor/firebase-app.js'), import('./vendor/firebase-auth.js'), import('./vendor/firebase-firestore.js')
   ]);
   const app = initializeApp(firebaseConfig);
   const auth = authLib.getAuth(app);
-  const db = dbLib.getFirestore(app);
+  const db = dbLib.initializeFirestore(app, {localCache:dbLib.persistentLocalCache({tabManager:dbLib.persistentMultipleTabManager()})});
   state.cloud = true;
   const tasksFor = user => dbLib.collection(db, 'users', user.uid, 'tasks');
+  const trackWrite = promise => { promise.catch(error=>setStatus(`Не удалось сохранить дело: ${error.message}`)); };
   state.adapter = {
     subscribe(callback) {
-      return dbLib.onSnapshot(tasksFor(state.user), snapshot => callback(snapshot.docs.map(doc => {
+      return dbLib.onSnapshot(tasksFor(state.user), {includeMetadataChanges:true}, snapshot => {
+        state.snapshotMetadata=snapshot.metadata;
+        updateSyncStatus();
+        callback(snapshot.docs.map(doc => {
         const data=doc.data();
         return {id:doc.id,...data,createdAt:data.createdAt?.toDate?.().toISOString()||'',updatedAt:data.updatedAt?.toDate?.().toISOString()||''};
-      })), error => setStatus(`Не удалось загрузить дела: ${error.message}`));
+        }));
+      }, error => setStatus(`Не удалось загрузить дела: ${error.message}`));
     },
-    add(task) { return dbLib.addDoc(tasksFor(state.user), {...task,createdAt:dbLib.serverTimestamp(),updatedAt:dbLib.serverTimestamp()}); },
-    update(id, patch) { return dbLib.updateDoc(dbLib.doc(tasksFor(state.user),id), {...patch, updatedAt:dbLib.serverTimestamp()}); },
-    remove(id) { return dbLib.deleteDoc(dbLib.doc(tasksFor(state.user),id)); }
+    add(task) { trackWrite(dbLib.addDoc(tasksFor(state.user), {...task,createdAt:dbLib.serverTimestamp(),updatedAt:dbLib.serverTimestamp()})); },
+    update(id, patch) { trackWrite(dbLib.updateDoc(dbLib.doc(tasksFor(state.user),id), {...patch, updatedAt:dbLib.serverTimestamp()})); },
+    remove(id) { trackWrite(dbLib.deleteDoc(dbLib.doc(tasksFor(state.user),id))); }
   };
   authLib.onAuthStateChanged(auth, user => {
     state.unsubscribe?.(); state.unsubscribe = null;
-    state.user = user; state.tasks = [];
+    state.user = user; state.tasks = []; state.snapshotMetadata=null;
     $('#account-label').textContent = user?.email || '';
     $('#sign-out').hidden = !user;
     if ($('#auth-dialog').open) $('#auth-dialog').close();
     if (user) state.unsubscribe = state.adapter.subscribe(tasks => { state.tasks = tasks; setStatus(''); render(); });
     else $('#auth-dialog').showModal();
+    updateSyncStatus();
     render();
   });
   $('#auth-form').addEventListener('submit', async event => {
@@ -71,6 +76,7 @@ async function startCloud() {
     $('#auth-submit').textContent = $('#auth-title').textContent;
     $('#auth-switch').textContent = state.authMode === 'signup' ? 'Уже есть аккаунт? Войти' : 'Создать аккаунт';
     $('#password-reset').hidden = state.authMode === 'signup';
+    $('#auth-form [name=password]').autocomplete = state.authMode === 'signup' ? 'new-password' : 'current-password';
     $('#auth-error').textContent = '';
   });
   $('#password-reset').addEventListener('click', async () => {
@@ -84,7 +90,7 @@ async function startCloud() {
 
 function authMessage(error) {
   const messages = {
-    'auth/invalid-credential':'Проверьте почту и пароль.',
+    'auth/invalid-credential':'Проверьте почту и пароль. Если вы здесь впервые, нажмите «Создать аккаунт».',
     'auth/email-already-in-use':'Аккаунт с такой почтой уже существует.',
     'auth/weak-password':'Пароль слишком короткий.',
     'auth/invalid-email':'Проверьте адрес почты.',
@@ -94,6 +100,17 @@ function authMessage(error) {
 }
 
 function setStatus(message) { $('#status').textContent = message; }
+function updateSyncStatus() {
+  const element=$('#sync-status');
+  if (!state.cloud || !state.user) { element.textContent=''; return; }
+  if (!navigator.onLine) element.textContent='Офлайн · изменения сохранятся на этом устройстве';
+  else if (!state.snapshotMetadata) element.textContent='Подключение к облаку…';
+  else if (state.snapshotMetadata?.hasPendingWrites) element.textContent='Синхронизация…';
+  else if (state.snapshotMetadata?.fromCache) element.textContent='Ожидание связи с облаком…';
+  else element.textContent='Синхронизировано';
+}
+window.addEventListener('online',updateSyncStatus);
+window.addEventListener('offline',updateSyncStatus);
 function setQuickDefaults() {
   const input = $('#quick-form [name=dueDate]');
   if (state.view === 'nodate' && !state.project) input.value = '';
@@ -166,6 +183,7 @@ $('#edit-form').addEventListener('submit', async event => {
 $('#delete-task').addEventListener('click', async()=>{const id=$('#edit-form').elements.id.value;if(!confirm('Удалить это дело?'))return;await mutate(()=>state.adapter.remove(id));$('#task-dialog').close()});
 
 setQuickDefaults();
+if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(error=>console.warn('Service worker:',error)));
 if (firebaseConfig?.apiKey && firebaseConfig?.projectId) {
   startCloud().catch(error=>{setStatus(`Не удалось подключить облако: ${error.message}`);$('#mode-banner').hidden=false;$('#mode-banner').textContent='Облако недоступно. Локальный предпросмотр не включён, чтобы не потерять синхронизацию.';render()});
 } else {

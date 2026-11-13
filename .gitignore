@@ -3,3 +3,4 @@ preview-*.png
 node_modules/
 smoke-test.mjs
 live-smoke.mjs
+pwa-smoke.mjs
