@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#15572e">
+  <title>Мои дела</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">✓</span> Мои дела</div>
+      <nav class="nav" aria-label="Разделы">
+        <button type="button" data-view="today" class="nav-item active">Сегодня <span id="count-today">0</span></button>
+        <button type="button" data-view="upcoming" class="nav-item">Ближайшие <span id="count-upcoming">0</span></button>
+        <button type="button" data-view="nodate" class="nav-item">Без даты <span id="count-nodate">0</span></button>
+        <button type="button" data-view="all" class="nav-item">Все дела <span id="count-all">0</span></button>
+      </nav>
+      <div class="side-label">ПРОЕКТЫ</div>
+      <nav class="nav projects" aria-label="Проекты">
+        <button type="button" data-project="ВЦ" class="project-item"><span>#</span> ВЦ</button>
+        <button type="button" data-project="Эко" class="project-item"><span>#</span> Эко</button>
+        <button type="button" data-project="Личное" class="project-item"><span>#</span> Личное</button>
+      </nav>
+      <div class="account"><span id="account-label"></span><button id="sign-out" type="button" hidden>Выйти</button></div>
+    </aside>
+
+    <main class="main">
+      <div id="mode-banner" class="mode-banner" hidden>Предпросмотр: дела хранятся только на этом устройстве. Синхронизация пока не подключена.</div>
+      <header class="topbar">
+        <div><p class="eyebrow" id="date-label"></p><h1 id="page-title">Сегодня</h1></div>
+        <button class="icon-button" type="button" id="account-button" aria-label="Аккаунт">●</button>
+      </header>
+
+      <form id="quick-form" class="quick-form">
+        <label class="visually-hidden" for="quick-title">Новое дело</label>
+        <span class="quick-plus" aria-hidden="true">＋</span>
+        <input id="quick-title" name="title" maxlength="160" autocomplete="off" placeholder="Добавить дело" required>
+        <button type="submit" class="quick-submit" aria-label="Добавить дело">→</button>
+        <div class="quick-options">
+          <label>Срок <input name="dueDate" type="date"></label>
+          <label>Проект <select name="project"><option value="">Без проекта</option><option>ВЦ</option><option>Эко</option><option>Личное</option></select></label>
+        </div>
+      </form>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <div id="task-sections" class="sections"></div>
+    </main>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Разделы на телефоне">
+    <button type="button" data-view="today" class="active">Сегодня</button>
+    <button type="button" data-view="upcoming">Ближайшие</button>
+    <button type="button" data-view="nodate">Без даты</button>
+    <button type="button" data-view="all">Все</button>
+  </nav>
+
+  <dialog id="task-dialog" class="dialog">
+    <form id="edit-form" method="dialog">
+      <div class="dialog-head"><h2>Изменить дело</h2><button type="button" data-close="task-dialog" aria-label="Закрыть">×</button></div>
+      <input name="id" type="hidden">
+      <label>Дело<input name="title" maxlength="160" required></label>
+      <label>Срок<input name="dueDate" type="date"></label>
+      <label>Проект<select name="project"><option value="">Без проекта</option><option>ВЦ</option><option>Эко</option><option>Личное</option></select></label>
+      <div class="dialog-actions"><button type="button" class="text-button danger" id="delete-task">Удалить</button><button type="submit" class="primary-button">Сохранить</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="auth-dialog" class="dialog auth-dialog">
+    <form id="auth-form" method="dialog">
+      <div class="dialog-head"><h2 id="auth-title">Войти</h2><button type="button" data-close="auth-dialog" aria-label="Закрыть">×</button></div>
+      <p>Войдите, чтобы видеть одни и те же дела на телефоне и компьютере.</p>
+      <label>Почта<input name="email" type="email" autocomplete="email" required></label>
+      <label>Пароль<input name="password" type="password" minlength="6" autocomplete="current-password" required></label>
+      <p id="auth-error" class="form-error" role="alert"></p>
+      <button type="submit" class="primary-button full" id="auth-submit">Войти</button>
+      <button type="button" class="text-button full" id="auth-switch">Создать аккаунт</button>
+      <button type="button" class="text-button full" id="password-reset">Забыли пароль?</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

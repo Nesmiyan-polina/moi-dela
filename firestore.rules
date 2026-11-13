@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // users/{uid}/tasks/{taskId}: title (1–160), dueDate ('' or YYYY-MM-DD),
+    // project (''/ВЦ/Эко/Личное), done (boolean), createdAt/updatedAt (timestamp).
+    function isAuthenticated() { return request.auth != null; }
+    function isOwner(uid) { return isAuthenticated() && request.auth.uid == uid; }
+    function uidUnchanged(uid) { return isOwner(uid); }
+    function uidNotModified(uid) { return isOwner(uid); }
+    function validTask(data) {
+      return data.keys().hasAll(['title','dueDate','project','done','createdAt','updatedAt'])
+        && data.keys().hasOnly(['title','dueDate','project','done','createdAt','updatedAt'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 160
+        && data.dueDate is string && data.dueDate.size() <= 10
+        && (data.dueDate == '' || data.dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+        && data.project is string && data.project in ['', 'ВЦ', 'Эко', 'Личное']
+        && data.done is bool
+        && data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    match /users/{uid}/tasks/{taskId} {
+      allow get, list: if isOwner(uid);
+      allow create: if uidUnchanged(uid) && validTask(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if uidNotModified(uid) && validTask(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isOwner(uid);
+    }
+  }
+}
