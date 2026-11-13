@@ -5,3 +5,4 @@ smoke-test.mjs
 live-smoke.mjs
 pwa-smoke.mjs
 offline-integration.mjs
+feature-qa.mjs
