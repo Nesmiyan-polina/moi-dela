@@ -397,6 +397,11 @@ $('#project-nav').addEventListener('click',event=>{const button=event.target.clo
 $('#manage-projects').addEventListener('click',()=>{closeMenu();$('#project-error').textContent='';renderProjectDialog();$('#projects-dialog').showModal();});
 $('#project-form').addEventListener('submit',async event=>{event.preventDefault();const name=event.currentTarget.elements.name.value.trim();const error=validProjectName(name)|| (state.projects.length>=30?'Можно создать не больше 30 проектов.':'');$('#project-error').textContent=error;if(error)return;await mutate(()=>state.adapter.saveProject(crypto.randomUUID(),name));event.currentTarget.reset();});
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click',()=>document.getElementById(button.dataset.close).close()));
+document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('click',event=>{
+  if(event.target!==dialog)return;
+  const bounds=dialog.getBoundingClientRect();
+  if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close();
+}));
 $('#task-dialog').addEventListener('close',closeDetails);
 $('#day-capacity').addEventListener('change',event=>{const hours=Number(event.target.value);if(!Number.isFinite(hours)||hours<1||hours>16){event.target.value=String(state.capacityMin/60);return;}mutate(()=>state.adapter.setCapacity(Math.round(hours*60)));});
 $('#subtask-form').addEventListener('submit',async event=>{event.preventDefault();const text=event.currentTarget.elements.text.value.trim();if(!text)return;if(state.openTaskId)await mutate(()=>state.adapter.addSubtask(state.openTaskId,text));else{state.subtasks.push({id:crypto.randomUUID(),text,done:false,createdAt:new Date().toISOString()});renderTaskDetails();}event.currentTarget.reset();});
